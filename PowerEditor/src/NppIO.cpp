@@ -1,5 +1,5 @@
 // This file is part of Notepad++ project
-// Copyright (C)2003 Don HO <don.h@free.fr>
+// Copyright (C)2020 Don HO <don.h@free.fr>
 //
 // This program is free software; you can redistribute it and/or
 // modify it under the terms of the GNU General Public License
@@ -35,6 +35,7 @@
 #include "VerticalFileSwitcher.h"
 #include "functionListPanel.h"
 #include "ReadDirectoryChanges.h"
+#include "ReadFileChanges.h"
 #include <tchar.h>
 #include <unordered_set>
 
@@ -57,30 +58,35 @@ DWORD WINAPI Notepad_plus::monitorFileOnChange(void * params)
 	const DWORD dwNotificationFlags = FILE_NOTIFY_CHANGE_LAST_WRITE | FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_SIZE;
 
 	// Create the monitor and add directory to watch.
-	CReadDirectoryChanges changes;
-	changes.AddDirectory(folderToMonitor, true, dwNotificationFlags);
+	CReadDirectoryChanges dirChanges;
+	dirChanges.AddDirectory(folderToMonitor, true, dwNotificationFlags);
 
-	HANDLE changeHandles[] = { buf->getMonitoringEvent(), changes.GetWaitHandle() };
+	CReadFileChanges fileChanges;
+	fileChanges.AddFile(fullFileName, FILE_NOTIFY_CHANGE_LAST_WRITE | FILE_NOTIFY_CHANGE_SIZE);
+
+	HANDLE changeHandles[] = { buf->getMonitoringEvent(), dirChanges.GetWaitHandle() };
 
 	bool toBeContinued = true;
 
 	while (toBeContinued)
 	{
-		DWORD waitStatus = ::WaitForMultipleObjects(_countof(changeHandles), changeHandles, FALSE, INFINITE);
+		DWORD waitStatus = ::WaitForMultipleObjects(_countof(changeHandles), changeHandles, FALSE, 250);
 		switch (waitStatus)
 		{
 			case WAIT_OBJECT_0 + 0:
-				// Mutex was signaled. User removes this folder or file browser is closed
+			// Mutex was signaled. User removes this folder or file browser is closed
+			{
 				toBeContinued = false;
+			}
 			break;
 
 			case WAIT_OBJECT_0 + 1:
-				// We've received a notification in the queue.
+			// We've received a notification in the queue.
 			{
 				DWORD dwAction;
 				generic_string fn;
 				// Process all available changes, ignore User actions
-				while (changes.Pop(dwAction, fn))
+				while (dirChanges.Pop(dwAction, fn))
 				{
 					// Fix monitoring files which are under root problem
 					size_t pos = fn.find(TEXT("\\\\"));
@@ -103,6 +109,13 @@ DWORD WINAPI Notepad_plus::monitorFileOnChange(void * params)
 			}
 			break;
 
+			case WAIT_TIMEOUT:
+			{
+				if (fileChanges.DetectChanges())
+					::PostMessage(h, NPPM_INTERNAL_RELOADSCROLLTOEND, reinterpret_cast<WPARAM>(buf), 0);
+			}
+			break;
+
 			case WAIT_IO_COMPLETION:
 				// Nothing to do.
 			break;
@@ -111,7 +124,8 @@ DWORD WINAPI Notepad_plus::monitorFileOnChange(void * params)
 
 	// Just for sample purposes. The destructor will
 	// call Terminate() automatically.
-	changes.Terminate();
+	dirChanges.Terminate();
+	fileChanges.Terminate();
 	delete monitorInfo;
 	return EXIT_SUCCESS;
 }
@@ -197,6 +211,9 @@ BufferID Notepad_plus::doOpen(const generic_string& fileName, bool isRecursive, 
 	if (isFileWorkspace(longFileName) && PathFileExists(longFileName))
 	{
 		nppParam.setWorkSpaceFilePath(0, longFileName);
+		_isWorkspaceFileLoadedFromCommandLine = true;
+		// This line switches to Project Panel 1 while starting up Npp
+		// and after dragging a workspace file to Npp:
 		command(IDM_VIEW_PROJECT_PANEL_1);
 		return BUFFER_INVALID;
 	}
@@ -724,7 +741,7 @@ void Notepad_plus::doClose(BufferID id, int whichOne, bool doDeleteBackup)
 	return;
 }
 
-generic_string Notepad_plus::exts2Filters(const generic_string& exts) const
+generic_string Notepad_plus::exts2Filters(const generic_string& exts, int maxExtsLen) const
 {
 	const TCHAR *extStr = exts.c_str();
 	TCHAR aExt[MAX_PATH];
@@ -732,6 +749,7 @@ generic_string Notepad_plus::exts2Filters(const generic_string& exts) const
 
 	int j = 0;
 	bool stop = false;
+
 	for (size_t i = 0, len = exts.length(); i < len && j < MAX_PATH - 1; ++i)
 	{
 		if (extStr[i] == ' ')
@@ -748,6 +766,12 @@ generic_string Notepad_plus::exts2Filters(const generic_string& exts) const
 					filters += TEXT(";");
 				}
 				j = 0;
+
+				if (maxExtsLen != -1 && i >= static_cast<size_t>(maxExtsLen))
+				{
+					filters += TEXT(" ... ");
+					break;
+				}
 			}
 		}
 		else
@@ -774,7 +798,7 @@ generic_string Notepad_plus::exts2Filters(const generic_string& exts) const
 	return filters;
 }
 
-int Notepad_plus::setFileOpenSaveDlgFilters(FileDialog & fDlg, int langType)
+int Notepad_plus::setFileOpenSaveDlgFilters(FileDialog & fDlg, bool showAllExt, int langType)
 {
 	NppParameters& nppParam = NppParameters::getInstance();
 	NppGUI & nppGUI = (NppGUI & )nppParam.getNppGUI();
@@ -820,7 +844,7 @@ int Notepad_plus::setFileOpenSaveDlgFilters(FileDialog & fDlg, int langType)
 				list += userList;
 			}
 
-			generic_string stringFilters = exts2Filters(list);
+			generic_string stringFilters = exts2Filters(list, showAllExt ? -1 : 40);
 			const TCHAR *filters = stringFilters.c_str();
 			if (filters[0])
 			{
@@ -1568,10 +1592,10 @@ bool Notepad_plus::fileSaveAs(BufferID id, bool isSaveCopy)
 	FileDialog fDlg(_pPublicInterface->getHSelf(), _pPublicInterface->getHinst());
 
     fDlg.setExtFilter(TEXT("All types"), TEXT(".*"), NULL);
-	int langTypeIndex = setFileOpenSaveDlgFilters(fDlg, buf->getLangType());
+	int langTypeIndex = setFileOpenSaveDlgFilters(fDlg, false, buf->getLangType());
 	fDlg.setDefFileName(buf->getFileName());
 
-    fDlg.setExtIndex(langTypeIndex+1); // +1 for "All types"
+    fDlg.setExtIndex(langTypeIndex + 1); // +1 for "All types"
 
 	// Disable file autodetection before opening save dialog to prevent use-after-delete bug.
 	NppParameters& nppParam = NppParameters::getInstance();
@@ -1600,7 +1624,7 @@ bool Notepad_plus::fileSaveAs(BufferID id, bool isSaveCopy)
 		{
 			_nativeLangSpeaker.messageBox("FileAlreadyOpenedInNpp",
 				_pPublicInterface->getHSelf(),
-				TEXT("The file is already opened in the Notepad++."),
+				TEXT("The file is already opened in Notepad++."),
 				TEXT("ERROR"),
 				MB_OK | MB_ICONSTOP);
 			switchToFile(other);
@@ -1634,7 +1658,7 @@ bool Notepad_plus::fileRename(BufferID id)
 		FileDialog fDlg(_pPublicInterface->getHSelf(), _pPublicInterface->getHinst());
 
 		fDlg.setExtFilter(TEXT("All types"), TEXT(".*"), NULL);
-		setFileOpenSaveDlgFilters(fDlg);
+		setFileOpenSaveDlgFilters(fDlg, false);
 
 		fDlg.setDefFileName(buf->getFileName());
 		TCHAR *pfn = fDlg.doSaveDlg();
@@ -1744,7 +1768,7 @@ void Notepad_plus::fileOpen()
     FileDialog fDlg(_pPublicInterface->getHSelf(), _pPublicInterface->getHinst());
 	fDlg.setExtFilter(TEXT("All types"), TEXT(".*"), NULL);
 
-	setFileOpenSaveDlgFilters(fDlg);
+	setFileOpenSaveDlgFilters(fDlg, true);
 
 	BufferID lastOpened = BUFFER_INVALID;
 	if (stringVector *pfns = fDlg.doOpenMultiFilesDlg())
@@ -1770,7 +1794,7 @@ void Notepad_plus::fileNew()
     BufferID newBufID = MainFileManager.newEmptyDocument();
 
     loadBufferIntoView(newBufID, currentView(), true);	//true, because we want multiple new files if possible
-    activateBuffer(newBufID, currentView());
+    switchToFile(newBufID);
 }
 
 
@@ -1806,7 +1830,8 @@ bool Notepad_plus::isFileSession(const TCHAR * filename)
 	return false;
 }
 
-bool Notepad_plus::isFileWorkspace(const TCHAR * filename) {
+bool Notepad_plus::isFileWorkspace(const TCHAR * filename)
+{
 	// if filename matches the ext of user defined workspace file ext, then it'll be opened as a workspace
 	const TCHAR *definedWorkspaceExt = NppParameters::getInstance().getNppGUI()._definedWorkspaceExt.c_str();
 	if (*definedWorkspaceExt != '\0')
@@ -2106,6 +2131,7 @@ bool Notepad_plus::fileLoadSession(const TCHAR *fn)
 				sessionExt += TEXT(".");
 			sessionExt += ext;
 			fDlg.setExtFilter(TEXT("Session file"), sessionExt.c_str(), NULL);
+			fDlg.setDefExt(ext);
 		}
 		fDlg.setExtFilter(TEXT("All types"), TEXT(".*"), NULL);
 		sessionFileName = fDlg.doOpenSingleFileDlg();
@@ -2202,6 +2228,7 @@ const TCHAR * Notepad_plus::fileSaveSession(size_t nbFile, TCHAR ** fileNames)
 			sessionExt += TEXT(".");
 		sessionExt += ext;
 		fDlg.setExtFilter(TEXT("Session file"), sessionExt.c_str(), NULL);
+		fDlg.setDefExt(ext);
 		fDlg.setExtIndex(0);		// 0 index for "custom extension types"
 	}
 	fDlg.setExtFilter(TEXT("All types"), TEXT(".*"), NULL);

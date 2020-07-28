@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <NotepadPlus>
-    <Native-Langue name="繁體中文/正體中文" filename="chinese.xml" version="7.8.3">
+    <Native-Langue name="台灣繁體" filename="taiwaneseMandarin.xml" version="7.8.7">
         <Menu>
             <Main>
                 <!-- Main Menu Entries -->
@@ -336,9 +336,9 @@
                     <Item CMID="4"  name="列印"/>
                     <Item CMID="5"  name="移動此檔案至另一個視窗"/>
                     <Item CMID="6"  name="複製此檔案至另一個視窗"/>
-                    <Item CMID="7"  name="將資料夾路徑複製到剪貼簿"/>
+                    <Item CMID="7"  name="將資料夾路徑及檔案名稱複製到剪貼簿"/>
                     <Item CMID="8"  name="將檔案名稱複製到剪貼簿"/>
-                    <Item CMID="9"  name="將資料夾路徑及檔案名稱複製到剪貼簿"/>
+                    <Item CMID="9"  name="將資料夾路徑複製到剪貼簿"/>
                     <Item CMID="10" name="重新命名此檔案"/>
                     <Item CMID="11" name="刪除現有檔案"/>
                     <Item CMID="12" name="將此檔案設為唯讀"/>
@@ -742,12 +742,12 @@
                     <Item id="6206" name="顯示行號"/>
                     <Item id="6207" name="顯示標記"/>
                     <Item id="6208" name="顯示邊界線"/>
-                    <Item id="6209" name="字元數："/>
                     <Item id="6234" name="關閉進階捲動功能
 （若有觸控板問題）"/>
                     <Item id="6211" name="邊緣線設定"/>
-                    <Item id="6212" name="垂直線模式"/>
                     <Item id="6213" name="背景色模式"/>
+                    <Item id="6237" name="如欲添加列標記可以在下面以數字指示其列位置。
+使用空格分隔不同數字來定義多個列標記。"/>
                     <Item id="6214" name="於游標行加上背景顏色"/>
                     <Item id="6215" name="啟用平滑字體"/>
                     <Item id="6231" name="邊框寬度"/>
@@ -774,7 +774,7 @@
                     <Item id="6413" name="開啟/儲存預設資料夾"/>
                     <Item id="6414" name="使用目前文件資料夾位置"/>
                     <Item id="6415" name="記住上次使用的資料夾"/>
-                    <Item id="6430" name="使用新式對話方塊（不含副檔名功能及 UNIX 路徑支援）"/>
+                    <Item id="6430" name="使用新式對話方塊（不含 UNIX 路徑支援）"/>
                     <Item id="6431" name="拖放資料夾時開啟資料夾中所有文件，而不啟動資料夾工作區"/>
                 </DefaultDir>
 
@@ -938,6 +938,7 @@
                     <Item id="6331" name="在標題列僅顯示檔案名稱（隱藏資料夾路徑）"/>
                     <Item id="6334" name="自動偵測檔案編碼"/>
                     <Item id="6314" name="在尋找與取代對話方塊中使用等寬字型（需要重新啟動 Notepad++）"/>
+                    <Item id="6349" name="使用 DirectWrite（可改善特殊字符的呈現，需要重新啟動 Notepad++）"/>
                     <Item id="6337" name="資料夾工作區檔案副檔名："/>
                     <Item id="6114" name="啟動"/>
                     <Item id="6117" name="開啟「最近使用的檔案」功能"/>
@@ -1082,6 +1083,7 @@
             <ColumnName name="名稱"/>
             <ColumnPath name="路徑"/>
             <ColumnType name="類型"/>
+            <ColumnSize name="長度"/>
         </WindowsDlg>
         <AsciiInsertion>
             <PanelTitle name="ASCII 插入面板"/>
@@ -1217,6 +1219,17 @@
             <summary-nbsel1 value=" 個選取字元（ "/>
             <summary-nbsel2 value=" 位元）在 "/>
             <summary-nbrange value=" 個選取範圍中"/>
+            <replace-in-files-confirm-title value="確認"/>
+            <replace-in-files-confirm-directory value="是否要替換所有匹配項在此目錄中："/>
+            <replace-in-files-confirm-filetype value="向所有擁有下列副檔名的檔案："/>
+            <replace-in-open-docs-confirm-title value="替換確認"/>
+            <replace-in-open-docs-confirm-message value="您確定要替換所有打開的文檔中的所有匹配項嗎？"/>
+            <find-result-caption value="搜尋結果"/>
+            <find-result-title value="搜尋"/>
+            <find-result-title-info value="（找到 $INT_REPLACE1$ 個結果在 $INT_REPLACE2$ 的文件中。搜尋文件量： $INT_REPLACE3$）"/>
+            <find-result-title-info-extra value=" - 僅在搜尋結果中尋找"/>
+            <find-result-hits value="（$INT_REPLACE$ 個結果）"/>
+            <find-regex-zero-length-match value="零長度的字元相符" />
         </MiscStrings>
     </Native-Langue>
 </NotepadPlus>

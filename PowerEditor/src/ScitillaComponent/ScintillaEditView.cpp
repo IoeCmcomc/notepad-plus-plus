@@ -1,5 +1,5 @@
 // This file is part of Notepad++ project
-// Copyright (C)2003 Don HO <don.h@free.fr>
+// Copyright (C)2020 Don HO <don.h@free.fr>
 //
 // This program is free software; you can redistribute it and/or
 // modify it under the terms of the GNU General Public License
@@ -328,6 +328,11 @@ void ScintillaEditView::init(HINSTANCE hInst, HWND hPere)
 	execute(SCI_INDICSETUNDER, SCE_UNIVERSAL_FOUND_STYLE_EXT3, true);
 	execute(SCI_INDICSETUNDER, SCE_UNIVERSAL_FOUND_STYLE_EXT4, true);
 	execute(SCI_INDICSETUNDER, SCE_UNIVERSAL_FOUND_STYLE_EXT5, true);
+
+	if ((NppParameters::getInstance()).getNppGUI()._writeTechnologyEngine == directWriteTechnology)
+		execute(SCI_SETTECHNOLOGY, SC_TECHNOLOGY_DIRECTWRITE);
+	// If useDirectWrite is turned off, leave the technology setting untouched,
+	// so that existing plugins using SCI_SETTECHNOLOGY behave like before
 
 	_codepage = ::GetACP();
 
@@ -1850,7 +1855,6 @@ void ScintillaEditView::restoreCurrentPosPostStep()
 	if (!_positionRestoreNeeded)
 		return;
 
-	static int32_t restoreDone = 0;
 	Buffer * buf = MainFileManager.getBufferByID(_currentBufferID);
 	Position & pos = buf->getPosition(this);
 
@@ -1946,13 +1950,14 @@ void ScintillaEditView::activateBuffer(BufferID buffer)
 		restyleBuffer();
 	}
 
+	// Everything should be updated, but the language
+	bufferUpdated(_currentBuffer, (BufferChangeMask & ~BufferChangeLanguage));
+
 	// restore the collapsed info
 	const std::vector<size_t> & lineStateVectorNew = newBuf->getHeaderLineState(this);
 	syncFoldStateWith(lineStateVectorNew);
 
 	restoreCurrentPosPreStep();
-
-	bufferUpdated(_currentBuffer, (BufferChangeMask & ~BufferChangeLanguage));	//everything should be updated, but the language (which undoes some operations done here like folding)
 
 	//setup line number margin
 	int numLines = static_cast<int32_t>(execute(SCI_GETLINECOUNT));
@@ -2252,15 +2257,12 @@ void ScintillaEditView::replaceSelWith(const char * replaceText)
 void ScintillaEditView::getVisibleStartAndEndPosition(int * startPos, int * endPos)
 {
 	assert(startPos != NULL && endPos != NULL);
+	// Get the position of the 1st and last showing chars from the edit view
+	RECT rcEditView;
+	getClientRect(rcEditView);
+	*startPos = static_cast<int32_t>(execute(SCI_POSITIONFROMPOINT, 0, 0));
+	*endPos = static_cast<int32_t>(execute(SCI_POSITIONFROMPOINT, rcEditView.right - rcEditView.left, rcEditView.bottom - rcEditView.top));
 
-	auto firstVisibleLine = execute(SCI_GETFIRSTVISIBLELINE);
-	*startPos = static_cast<int32_t>(execute(SCI_POSITIONFROMLINE, execute(SCI_DOCLINEFROMVISIBLE, firstVisibleLine)));
-	auto linesOnScreen = execute(SCI_LINESONSCREEN);
-	auto lineCount = execute(SCI_GETLINECOUNT);
-	auto visibleLine = execute(SCI_DOCLINEFROMVISIBLE, firstVisibleLine + min(linesOnScreen, lineCount));
-	*endPos = static_cast<int32_t>(execute(SCI_POSITIONFROMLINE, visibleLine));
-	if (*endPos == -1) 
-		*endPos = static_cast<int32_t>(execute(SCI_GETLENGTH));
 }
 
 char * ScintillaEditView::getWordFromRange(char * txt, int size, int pos1, int pos2)
@@ -2595,6 +2597,7 @@ void ScintillaEditView::performGlobalStyles()
 		edgeColor = style._fgColor;
 	}
 	execute(SCI_SETEDGECOLOUR, edgeColor);
+	::SendMessage(_hParent, NPPM_INTERNAL_EDGEMULTISETSIZE, 0, 0);
 
 	COLORREF foldMarginColor = grey;
 	COLORREF foldMarginHiColor = white;
@@ -2607,6 +2610,15 @@ void ScintillaEditView::performGlobalStyles()
 	}
 	execute(SCI_SETFOLDMARGINCOLOUR, true, foldMarginColor);
 	execute(SCI_SETFOLDMARGINHICOLOUR, true, foldMarginHiColor);
+
+	COLORREF urlHoveredFG = grey;
+	i = stylers.getStylerIndexByName(TEXT("URL hovered"));
+	if (i != -1)
+	{
+		Style & style = stylers.getStyler(i);
+		urlHoveredFG = style._fgColor;
+	}
+	execute(SCI_INDICSETHOVERFORE, URL_INDIC, urlHoveredFG);
 
 	COLORREF foldfgColor = white, foldbgColor = grey, activeFoldFgColor = red;
 	getFoldColor(foldfgColor, foldbgColor, activeFoldFgColor);
@@ -2764,6 +2776,13 @@ pair<int, int> ScintillaEditView::getSelectionLinesRange() const
 
 	range.first = static_cast<int32_t>(execute(SCI_LINEFROMPOSITION, start));
 	range.second = static_cast<int32_t>(execute(SCI_LINEFROMPOSITION, end));
+
+	if ((range.first != range.second) && (execute(SCI_POSITIONFROMLINE, range.second) == end))
+	{
+		// if the end of the selection includes the line-ending, 
+		// then don't include the following line in the range
+		--range.second;
+	}
 
     return range;
 }
@@ -3271,6 +3290,8 @@ void ScintillaEditView::foldChanged(size_t line, int levelNow, int levelPrev)
 
 void ScintillaEditView::scrollPosToCenter(size_t pos)
 {
+	_positionRestoreNeeded = false;
+
 	execute(SCI_GOTOPOS, pos);
 	int line = static_cast<int32_t>(execute(SCI_LINEFROMPOSITION, pos));
 
@@ -3569,7 +3590,7 @@ void ScintillaEditView::insertNewLineBelowCurrentLine()
 	execute(SCI_SETEMPTYSELECTION, execute(SCI_POSITIONFROMLINE, current_line + 1));
 }
 
-void ScintillaEditView::sortLines(size_t fromLine, size_t toLine, ISorter *pSort)
+void ScintillaEditView::sortLines(size_t fromLine, size_t toLine, ISorter* pSort)
 {
 	if (fromLine >= toLine)
 	{
@@ -3591,16 +3612,19 @@ void ScintillaEditView::sortLines(size_t fromLine, size_t toLine, ISorter *pSort
 	}
 	assert(toLine - fromLine + 1 == splitText.size());
 	const std::vector<generic_string> sortedText = pSort->sort(splitText);
-	const generic_string joined = stringJoin(sortedText, getEOLString());
+	generic_string joined = stringJoin(sortedText, getEOLString());
 	if (sortEntireDocument)
 	{
 		assert(joined.length() == text.length());
-		replaceTarget(joined.c_str(), int(startPos), int(endPos));
 	}
 	else
 	{
 		assert(joined.length() + getEOLString().length() == text.length());
-		replaceTarget((joined + getEOLString()).c_str(), int(startPos), int(endPos));
+		joined += getEOLString();
+	}
+	if (text != joined)
+	{
+		replaceTarget(joined.c_str(), int(startPos), int(endPos));
 	}
 }
 

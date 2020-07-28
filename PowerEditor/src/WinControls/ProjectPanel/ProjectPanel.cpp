@@ -1,5 +1,5 @@
 // This file is part of Notepad++ project
-// Copyright (C)2003 Don HO <don.h@free.fr>
+// Copyright (C)2020 Don HO <don.h@free.fr>
 //
 // This program is free software; you can redistribute it and/or
 // modify it under the terms of the GNU General Public License
@@ -44,6 +44,14 @@
 #define INDEX_CLOSED_NODE    4
 #define INDEX_LEAF           5
 #define INDEX_LEAF_INVALID   6
+
+ProjectPanel::~ProjectPanel()
+{
+	for (const auto s : fullPathStrs)
+	{
+		delete s;
+	}
+}
 
 INT_PTR CALLBACK ProjectPanel::run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam)
 {
@@ -390,7 +398,8 @@ bool ProjectPanel::openWorkSpace(const TCHAR *projectFileName)
 
 	NativeLangSpeaker *pNativeSpeaker = (NppParameters::getInstance()).getNativeLangSpeaker();
 	generic_string workspace = pNativeSpeaker->getAttrNameStr(PM_WORKSPACEROOTNAME, "ProjectManager", "WorkspaceRootName");
-	HTREEITEM rootItem = _treeView.addItem(workspace.c_str(), TVI_ROOT, INDEX_CLEAN_ROOT);
+	TCHAR * fileName = PathFindFileName(projectFileName);
+	HTREEITEM rootItem = _treeView.addItem(fileName, TVI_ROOT, INDEX_CLEAN_ROOT);
 
 	for ( ; childNode ; childNode = childNode->NextSibling(TEXT("Project")))
 	{
@@ -445,6 +454,9 @@ bool ProjectPanel::writeWorkSpace(TCHAR *projectFileName)
     HTREEITEM tvRoot = _treeView.getRoot();
     if (!tvRoot)
       return false;
+
+	TCHAR * fileName = PathFindFileName(projectFileName);
+	_treeView.renameItem(tvRoot, fileName);
 
     for (HTREEITEM tvProj = _treeView.getChildFrom(tvRoot);
         tvProj != NULL;
@@ -530,7 +542,12 @@ bool ProjectPanel::buildTreeFrom(TiXmlNode *projectRoot, HTREEITEM hParentItem)
 			generic_string fullPath = getAbsoluteFilePath(strValue);
 			TCHAR *strValueLabel = ::PathFindFileName(strValue);
 			int iImage = ::PathFileExists(fullPath.c_str())?INDEX_LEAF:INDEX_LEAF_INVALID;
-			_treeView.addItem(strValueLabel, hParentItem, iImage, fullPath.c_str());
+
+			generic_string* fullPathStr = new generic_string(fullPath);
+			fullPathStrs.push_back(fullPathStr);
+			LPARAM lParamFullPathStr = reinterpret_cast<LPARAM>(fullPathStr);
+
+			_treeView.addItem(strValueLabel, hParentItem, iImage, lParamFullPathStr);
 		}
 	}
 	return true;
@@ -562,7 +579,7 @@ void ProjectPanel::openSelectFile()
 		tvItem.mask = TVIF_IMAGE | TVIF_SELECTEDIMAGE;
 		if (::PathFileExists(fn->c_str()))
 		{
-			::SendMessage(_hParent, NPPM_DOOPEN, 0, reinterpret_cast<LPARAM>(fn->c_str()));
+			::PostMessage(_hParent, NPPM_DOOPEN, 0, reinterpret_cast<LPARAM>(fn->c_str()));
 			tvItem.iImage = INDEX_LEAF;
 			tvItem.iSelectedImage = INDEX_LEAF;
 		}
@@ -846,6 +863,35 @@ HTREEITEM ProjectPanel::addFolder(HTREEITEM hTreeItem, const TCHAR *folderName)
 	return addedItem;
 }
 
+bool ProjectPanel::saveWorkspaceRequest()
+{ // returns true for continue and false for break
+	if (_isDirty)
+	{
+		NativeLangSpeaker *pNativeSpeaker = (NppParameters::getInstance()).getNativeLangSpeaker();
+		int res = pNativeSpeaker->messageBox("ProjectPanelOpenDoSaveDirtyWsOrNot",
+					_hSelf,
+					TEXT("The current workspace was modified. Do you want to save the current project?"),
+					TEXT("Open Workspace"),
+					MB_YESNOCANCEL | MB_ICONQUESTION | MB_APPLMODAL);
+				
+		if (res == IDYES)
+		{
+			if (!saveWorkSpace())
+				return false;
+		}
+		else if (res == IDNO)
+		{
+			// Don't save so do nothing here
+		}
+		else if (res == IDCANCEL) 
+		{
+			// User cancels action "New Workspace" so we interrupt here
+			return false;
+		}
+	}
+	return true;
+}
+
 void ProjectPanel::popupMenuCmd(int cmdID)
 {
 	// get selected item handle
@@ -972,31 +1018,8 @@ void ProjectPanel::popupMenuCmd(int cmdID)
 
 		case IDM_PROJECT_OPENWS:
 		{
-			NativeLangSpeaker *pNativeSpeaker = (NppParameters::getInstance()).getNativeLangSpeaker();
-			if (_isDirty)
-			{
-				
-				int res = pNativeSpeaker->messageBox("ProjectPanelOpenDoSaveDirtyWsOrNot",
-					_hSelf,
-					TEXT("The current workspace was modified. Do you want to save the current project?"),
-					TEXT("Open Workspace"),
-					MB_YESNOCANCEL | MB_ICONQUESTION | MB_APPLMODAL);
-				
-				if (res == IDYES)
-				{
-					if (!saveWorkSpace())
-						return;
-				}
-				else if (res == IDNO)
-				{
-					// Don't save so do nothing here
-				}
-				else if (res == IDCANCEL) 
-				{
-					// User cancels action "New Workspace" so we interrupt here
-					return;
-				}
-			}
+			if (!saveWorkspaceRequest())
+				break;
 
 			FileDialog fDlg(_hSelf, ::GetModuleHandle(NULL));
 			setFileExtFilter(fDlg);
@@ -1004,6 +1027,7 @@ void ProjectPanel::popupMenuCmd(int cmdID)
 			{
 				if (!openWorkSpace(fn))
 				{
+					NativeLangSpeaker *pNativeSpeaker = (NppParameters::getInstance()).getNativeLangSpeaker();
 					pNativeSpeaker->messageBox("ProjectPanelOpenFailed",
 						_hSelf,
 						TEXT("The workspace could not be opened.\rIt seems the file to open is not a valid project file."),
@@ -1175,6 +1199,7 @@ void ProjectPanel::setFileExtFilter(FileDialog & fDlg)
 			workspaceExt += TEXT(".");
 		workspaceExt += ext;
 		fDlg.setExtFilter(TEXT("Workspace file"), workspaceExt.c_str(), NULL);
+		fDlg.setDefExt(ext);
 	}
 	fDlg.setExtFilter(TEXT("All types"), TEXT(".*"), NULL);
 }
@@ -1190,7 +1215,12 @@ void ProjectPanel::addFiles(HTREEITEM hTreeItem)
 		for (size_t i = 0 ; i < sz ; ++i)
 		{
 			TCHAR *strValueLabel = ::PathFindFileName(pfns->at(i).c_str());
-			_treeView.addItem(strValueLabel, hTreeItem, INDEX_LEAF, pfns->at(i).c_str());
+
+			generic_string* pathFileStr = new generic_string(pfns->at(i));
+			fullPathStrs.push_back(pathFileStr);
+			LPARAM lParamPathFileStr = reinterpret_cast<LPARAM>(pathFileStr);
+
+			_treeView.addItem(strValueLabel, hTreeItem, INDEX_LEAF, lParamPathFileStr);
 		}
 		_treeView.expand(hTreeItem);
 		setWorkSpaceDirty(true);
@@ -1247,7 +1277,11 @@ void ProjectPanel::recursiveAddFilesFrom(const TCHAR *folderPath, HTREEITEM hTre
 		if (folderPath[lstrlen(folderPath)-1] != '\\')
 			pathFile += TEXT("\\");
 		pathFile += files[i];
-		_treeView.addItem(files[i].c_str(), hTreeItem, INDEX_LEAF, pathFile.c_str());
+
+		generic_string* pathFileStr = new generic_string(pathFile);
+		fullPathStrs.push_back(pathFileStr);
+		LPARAM lParamPathFileStr = reinterpret_cast<LPARAM>(pathFileStr);
+		_treeView.addItem(files[i].c_str(), hTreeItem, INDEX_LEAF, lParamPathFileStr);
 	}
 
 	::FindClose(hFile);

@@ -1,5 +1,5 @@
 // This file is part of Notepad++ project
-// Copyright (C)2003 Don HO <don.h@free.fr>
+// Copyright (C)2020 Don HO <don.h@free.fr>
 //
 // This program is free software; you can redistribute it and/or
 // modify it under the terms of the GNU General Public License
@@ -115,7 +115,7 @@ static WORD getBinaryArchitectureType(const TCHAR *filePath)
 #ifndef LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR
 	#define	LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR	0x00000100
 #endif
-#ifndef LOAD_LIBRARY_SEARCH_DLL_LOAD_DIRS
+#ifndef LOAD_LIBRARY_SEARCH_DEFAULT_DIRS
 	#define	LOAD_LIBRARY_SEARCH_DEFAULT_DIRS	0x00001000
 #endif
 

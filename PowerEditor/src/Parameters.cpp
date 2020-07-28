@@ -1,5 +1,5 @@
 // This file is part of Notepad++ project
-// Copyright (C)2003 Don HO <don.h@free.fr>
+// Copyright (C)2020 Don HO <don.h@free.fr>
 //
 // This program is free software; you can redistribute it and/or
 // modify it under the terms of the GNU General Public License
@@ -127,7 +127,7 @@ static const WinMenuKeyDefinition winKeyDefs[] =
 	{ VK_U,       IDM_EDIT_SENTENCECASE_BLEND,                  true,  true,  true,  nullptr },
 	{ VK_NULL,    IDM_EDIT_INVERTCASE,                          false, false, false, nullptr },
 	{ VK_NULL,    IDM_EDIT_RANDOMCASE,                          false, false, false, nullptr },
-//	{ VK_NULL,    IDM_EDIT_DUP_LINE,                            false, false, false, nullptr },
+	{ VK_NULL,    IDM_EDIT_REMOVE_DUP_LINES,                    false, false, false, nullptr },
 	{ VK_I,       IDM_EDIT_SPLIT_LINES,                         true,  false, false, nullptr },
 	{ VK_J,       IDM_EDIT_JOIN_LINES,                          true,  false, false, nullptr },
 	{ VK_UP,      IDM_EDIT_LINE_UP,                             true,  false, true,  nullptr },
@@ -195,7 +195,7 @@ static const WinMenuKeyDefinition winKeyDefs[] =
 	{ VK_G,       IDM_SEARCH_GOTOLINE,                          true,  false, false, nullptr },
 	{ VK_B,       IDM_SEARCH_GOTOMATCHINGBRACE,                 true,  false, false, nullptr },
 	{ VK_B,       IDM_SEARCH_SELECTMATCHINGBRACES,              true,  true,  false, nullptr },
-	{ VK_NULL,    IDM_SEARCH_MARK,                              false, false, false, nullptr },
+	{ VK_M,       IDM_SEARCH_MARK,                              true,  false, false, nullptr },
 	{ VK_NULL,    IDM_SEARCH_MARKALLEXT1,                       false, false, false, nullptr },
 	{ VK_NULL,    IDM_SEARCH_MARKALLEXT2,                       false, false, false, nullptr },
 	{ VK_NULL,    IDM_SEARCH_MARKALLEXT3,                       false, false, false, nullptr },
@@ -2243,6 +2243,10 @@ void NppParameters::feedFindHistoryParameters(TiXmlNode *node)
 	if (!findHistoryRoot) return;
 
 	(findHistoryRoot->ToElement())->Attribute(TEXT("nbMaxFindHistoryPath"), &_findHistory._nbMaxFindHistoryPath);
+	if (_findHistory._nbMaxFindHistoryPath > NB_MAX_FINDHISTORY_PATH)
+	{
+		_findHistory._nbMaxFindHistoryPath = NB_MAX_FINDHISTORY_PATH;
+	}
 	if ((_findHistory._nbMaxFindHistoryPath > 0) && (_findHistory._nbMaxFindHistoryPath <= NB_MAX_FINDHISTORY_PATH))
 	{
 		for (TiXmlNode *childNode = findHistoryRoot->FirstChildElement(TEXT("Path"));
@@ -2258,6 +2262,10 @@ void NppParameters::feedFindHistoryParameters(TiXmlNode *node)
 	}
 
 	(findHistoryRoot->ToElement())->Attribute(TEXT("nbMaxFindHistoryFilter"), &_findHistory._nbMaxFindHistoryFilter);
+	if (_findHistory._nbMaxFindHistoryFilter > NB_MAX_FINDHISTORY_FILTER)
+	{
+		_findHistory._nbMaxFindHistoryFilter = NB_MAX_FINDHISTORY_FILTER;
+	}
 	if ((_findHistory._nbMaxFindHistoryFilter > 0) && (_findHistory._nbMaxFindHistoryFilter <= NB_MAX_FINDHISTORY_FILTER))
 	{
 		for (TiXmlNode *childNode = findHistoryRoot->FirstChildElement(TEXT("Filter"));
@@ -2273,6 +2281,10 @@ void NppParameters::feedFindHistoryParameters(TiXmlNode *node)
 	}
 
 	(findHistoryRoot->ToElement())->Attribute(TEXT("nbMaxFindHistoryFind"), &_findHistory._nbMaxFindHistoryFind);
+	if (_findHistory._nbMaxFindHistoryFind > NB_MAX_FINDHISTORY_FIND)
+	{
+		_findHistory._nbMaxFindHistoryFind = NB_MAX_FINDHISTORY_FIND;
+	}
 	if ((_findHistory._nbMaxFindHistoryFind > 0) && (_findHistory._nbMaxFindHistoryFind <= NB_MAX_FINDHISTORY_FIND))
 	{
 		for (TiXmlNode *childNode = findHistoryRoot->FirstChildElement(TEXT("Find"));
@@ -2288,6 +2300,10 @@ void NppParameters::feedFindHistoryParameters(TiXmlNode *node)
 	}
 
 	(findHistoryRoot->ToElement())->Attribute(TEXT("nbMaxFindHistoryReplace"), &_findHistory._nbMaxFindHistoryReplace);
+	if (_findHistory._nbMaxFindHistoryReplace > NB_MAX_FINDHISTORY_REPLACE)
+	{
+		_findHistory._nbMaxFindHistoryReplace = NB_MAX_FINDHISTORY_REPLACE;
+	}
 	if ((_findHistory._nbMaxFindHistoryReplace > 0) && (_findHistory._nbMaxFindHistoryReplace <= NB_MAX_FINDHISTORY_REPLACE))
 	{
 		for (TiXmlNode *childNode = findHistoryRoot->FirstChildElement(TEXT("Replace"));
@@ -2358,6 +2374,10 @@ void NppParameters::feedFindHistoryParameters(TiXmlNode *node)
 	boolStr = (findHistoryRoot->ToElement())->Attribute(TEXT("isSearch2ButtonsMode"));
 	if (boolStr)
 		_findHistory._isSearch2ButtonsMode = (lstrcmp(TEXT("yes"), boolStr) == 0);
+
+	boolStr = (findHistoryRoot->ToElement())->Attribute(TEXT("regexBackward4PowerUser"));
+	if (boolStr)
+		_findHistory._regexBackward4PowerUser = (lstrcmp(TEXT("yes"), boolStr) == 0);
 }
 
 void NppParameters::feedShortcut(TiXmlNode *node)
@@ -3794,7 +3814,7 @@ generic_string NppParameters::getLocPathFromStr(const generic_string & localizat
 	if (localizationCode == TEXT("ca"))
 		return TEXT("catalan.xml");
 	if (localizationCode == TEXT("zh-tw") || localizationCode == TEXT("zh-hk") || localizationCode == TEXT("zh-sg"))
-		return TEXT("chinese.xml");
+		return TEXT("taiwaneseMandarin.xml");
 	if (localizationCode == TEXT("zh") || localizationCode == TEXT("zh-cn"))
 		return TEXT("chineseSimplified.xml");
 	if (localizationCode == TEXT("co") || localizationCode == TEXT("co-fr"))
@@ -3931,6 +3951,8 @@ generic_string NppParameters::getLocPathFromStr(const generic_string & localizat
 		return TEXT("welsh.xml");
 	if (localizationCode == TEXT("zu") || localizationCode == TEXT("zu-za"))
 		return TEXT("zulu.xml");
+	if (localizationCode == TEXT("ne") || localizationCode == TEXT("nep"))
+		return TEXT("nepali.xml");
 
 	return generic_string();
 }
@@ -4861,7 +4883,7 @@ void NppParameters::feedGUIParameters(TiXmlNode *node)
 			const TCHAR *bDir = element->Attribute(TEXT("useCustumDir"));
 			if (bDir)
 			{
-				_nppGUI._useDir = (lstrcmp(bDir, TEXT("yes")) == 0);;
+				_nppGUI._useDir = (lstrcmp(bDir, TEXT("yes")) == 0);
 			}
 			const TCHAR *pDir = element->Attribute(TEXT("dir"));
 			if (pDir)
@@ -5119,6 +5141,10 @@ void NppParameters::feedGUIParameters(TiXmlNode *node)
 			if (optNameMonoFont)
 				_nppGUI._monospacedFontFindDlg = (lstrcmp(optNameMonoFont, TEXT("yes")) == 0);
 
+			const TCHAR * optNameWriteTechnologyEngine = element->Attribute(TEXT("writeTechnologyEngine"));
+			if (optNameWriteTechnologyEngine)
+				_nppGUI._writeTechnologyEngine = (lstrcmp(optNameWriteTechnologyEngine, TEXT("1")) == 0) ? directWriteTechnology : defaultTechnology;
+
 			const TCHAR * optStopFillingFindField = element->Attribute(TEXT("stopFillingFindField"));
 			if (optStopFillingFindField)
 				_nppGUI._stopFillingFindField = (lstrcmp(optStopFillingFindField, TEXT("yes")) == 0);
@@ -5266,15 +5292,13 @@ void NppParameters::feedScintillaParam(TiXmlNode *node)
 	}
 
 	// Do Edge
-	nm = element->Attribute(TEXT("edge"));
+	nm = element->Attribute(TEXT("isEdgeBgMode"));
 	if (nm)
 	{
-		if (!lstrcmp(nm, TEXT("background")))
-			_svp._edgeMode = EDGE_BACKGROUND;
-		else if (!lstrcmp(nm, TEXT("line")))
-			_svp._edgeMode = EDGE_LINE;
-		else
-			_svp._edgeMode = EDGE_NONE;
+		if (!lstrcmp(nm, TEXT("yes")))
+			_svp._isEdgeBgMode = true;
+		else if (!lstrcmp(nm, TEXT("no")))
+			_svp._isEdgeBgMode = false;
 	}
 
 	// Do Scintilla border edge
@@ -5287,13 +5311,13 @@ void NppParameters::feedScintillaParam(TiXmlNode *node)
 			_svp._showBorderEdge = false;
 	}
 
-	int val;
-	nm = element->Attribute(TEXT("edgeNbColumn"), &val);
+	nm = element->Attribute(TEXT("edgeMultiColumnPos"));
 	if (nm)
 	{
-		_svp._edgeNbColumn = val;
+		str2numberVector(nm, _svp._edgeMultiColumnPos);
 	}
 
+	int val;
 	nm = element->Attribute(TEXT("zoom"), &val);
 	if (nm)
 	{
@@ -5473,15 +5497,15 @@ bool NppParameters::writeScintillaParams()
 	(scintNode->ToElement())->SetAttribute(TEXT("Wrap"), _svp._doWrap?TEXT("yes"):TEXT("no"));
 	(scintNode->ToElement())->SetAttribute(TEXT("borderEdge"), _svp._showBorderEdge ? TEXT("yes") : TEXT("no"));
 
-	const TCHAR *edgeStr;
-	if (_svp._edgeMode == EDGE_NONE)
-		edgeStr = TEXT("no");
-	else if (_svp._edgeMode == EDGE_LINE)
-		edgeStr = TEXT("line");
-	else
-		edgeStr = TEXT("background");
-	(scintNode->ToElement())->SetAttribute(TEXT("edge"), edgeStr);
-	(scintNode->ToElement())->SetAttribute(TEXT("edgeNbColumn"), _svp._edgeNbColumn);
+	generic_string edgeColumnPosStr;
+	for (auto i : _svp._edgeMultiColumnPos)
+	{
+		std::string s = std::to_string(i);
+		edgeColumnPosStr += generic_string(s.begin(), s.end());
+		edgeColumnPosStr += TEXT(" ");
+	}
+	(scintNode->ToElement())->SetAttribute(TEXT("isEdgeBgMode"), _svp._isEdgeBgMode ? TEXT("yes") : TEXT("no"));
+	(scintNode->ToElement())->SetAttribute(TEXT("edgeMultiColumnPos"), edgeColumnPosStr);
 	(scintNode->ToElement())->SetAttribute(TEXT("zoom"), _svp._zoom);
 	(scintNode->ToElement())->SetAttribute(TEXT("zoom2"), _svp._zoom2);
 	(scintNode->ToElement())->SetAttribute(TEXT("whiteSpaceShow"), _svp._whiteSpaceShow?TEXT("show"):TEXT("hide"));
@@ -5899,6 +5923,7 @@ void NppParameters::createXmlTreeFromGUIParams()
 		GUIConfigElement->SetAttribute(TEXT("fileSwitcherWithoutExtColumn"), _nppGUI._fileSwitcherWithoutExtColumn ? TEXT("yes") : TEXT("no"));
 		GUIConfigElement->SetAttribute(TEXT("backSlashIsEscapeCharacterForSql"), _nppGUI._backSlashIsEscapeCharacterForSql ? TEXT("yes") : TEXT("no"));
 		GUIConfigElement->SetAttribute(TEXT("monospacedFontFindDlg"), _nppGUI._monospacedFontFindDlg ? TEXT("yes") : TEXT("no"));
+		GUIConfigElement->SetAttribute(TEXT("writeTechnologyEngine"), _nppGUI._writeTechnologyEngine);
 		GUIConfigElement->SetAttribute(TEXT("stopFillingFindField"), _nppGUI._stopFillingFindField ? TEXT("yes") : TEXT("no"));
 		GUIConfigElement->SetAttribute(TEXT("newStyleSaveDlg"), _nppGUI._useNewStyleSaveDlg ? TEXT("yes") : TEXT("no"));
 		GUIConfigElement->SetAttribute(TEXT("isFolderDroppedOpenFiles"), _nppGUI._isFolderDroppedOpenFiles ? TEXT("yes") : TEXT("no"));
@@ -5978,6 +6003,7 @@ bool NppParameters::writeFindHistory()
 	(findHistoryRoot->ToElement())->SetAttribute(TEXT("transparency"), _findHistory._transparency);
 	(findHistoryRoot->ToElement())->SetAttribute(TEXT("dotMatchesNewline"),		_findHistory._dotMatchesNewline?TEXT("yes"):TEXT("no"));
 	(findHistoryRoot->ToElement())->SetAttribute(TEXT("isSearch2ButtonsMode"),		_findHistory._isSearch2ButtonsMode?TEXT("yes"):TEXT("no"));
+	(findHistoryRoot->ToElement())->SetAttribute(TEXT("regexBackward4PowerUser"),		_findHistory._regexBackward4PowerUser ? TEXT("yes") : TEXT("no"));
 
 	TiXmlElement hist_element{TEXT("")};
 

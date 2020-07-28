@@ -1,5 +1,5 @@
 // This file is part of Notepad++ project
-// Copyright (C)2003 Don HO <don.h@free.fr>
+// Copyright (C)2020 Don HO <don.h@free.fr>
 //
 // This program is free software; you can redistribute it and/or
 // modify it under the terms of the GNU General Public License
@@ -91,6 +91,7 @@ enum ChangeDetect { cdDisabled = 0x0, cdEnabledOld = 0x01, cdEnabledNew = 0x02, 
 enum BackupFeature {bak_none = 0, bak_simple = 1, bak_verbose = 2};
 enum OpenSaveDirSetting {dir_followCurrent = 0, dir_last = 1, dir_userDef = 2};
 enum MultiInstSetting {monoInst = 0, multiInstOnSession = 1, multiInst = 2};
+enum writeTechnologyEngine {defaultTechnology = 0, directWriteTechnology = 1};
 
 const int LANG_INDEX_INSTR = 0;
 const int LANG_INDEX_INSTR2 = 1;
@@ -835,6 +836,7 @@ struct NppGUI final
 	bool _backSlashIsEscapeCharacterForSql = true;
 	bool _stopFillingFindField = false;
 	bool _monospacedFontFindDlg = false;
+	writeTechnologyEngine _writeTechnologyEngine = defaultTechnology;
 	bool _isWordCharDefault = true;
 	std::string _customWordChars;
 
@@ -920,8 +922,9 @@ struct ScintillaViewParams
 	bool _currentLineHilitingShow = true;
 	bool _wrapSymbolShow = false;
 	bool _doWrap = false;
-	int _edgeMode = EDGE_NONE;
-	int _edgeNbColumn = 80;
+	bool _isEdgeBgMode = false;
+
+	std::vector<size_t> _edgeMultiColumnPos;
 	int _zoom = 0;
 	int _zoom2 = 0;
 	bool _whiteSpaceShow = false;
@@ -1170,6 +1173,9 @@ struct FindHistory final
 	bool _isDlgAlwaysVisible = false;
 	bool _isFilterFollowDoc = false;
 	bool _isFolderFollowDoc = false;
+
+	// Allow regExpr backward search: this option is not present in UI, only to modify in config.xml
+	bool _regexBackward4PowerUser = false;
 };
 
 
@@ -1746,6 +1752,7 @@ public:
 	void setShortcutDirty() { _isAnyShortcutModified = true; };
 	void setAdminMode(bool isAdmin) { _isAdminMode = isAdmin; }
 	bool isAdmin() const { return _isAdminMode; }
+	bool regexBackward4PowerUser() const { return _findHistory._regexBackward4PowerUser; }
 
 private:
 	bool _isAnyShortcutModified = false;

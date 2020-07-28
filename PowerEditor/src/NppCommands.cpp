@@ -1,5 +1,5 @@
 // This file is part of Notepad++ project
-// Copyright (C)2003 Don HO <don.h@free.fr>
+// Copyright (C)2020 Don HO <don.h@free.fr>
 //
 // This program is free software; you can redistribute it and/or
 // modify it under the terms of the GNU General Public License
@@ -583,7 +583,7 @@ void Notepad_plus::command(int id)
 				hasLineSelection = selStart != selEnd;
 				if (hasLineSelection)
 				{
-					pair<int, int> lineRange = _pEditView->getSelectionLinesRange();
+					const pair<int, int> lineRange = _pEditView->getSelectionLinesRange();
 					// One single line selection is not allowed.
 					if (lineRange.first == lineRange.second)
 					{
@@ -1022,23 +1022,32 @@ void Notepad_plus::command(int id)
 		case IDM_SEARCH_FINDNEXT :
 		case IDM_SEARCH_FINDPREV :
 		{
-			if (!_findReplaceDlg.isCreated())
-				return;
-
-			FindOption op = _findReplaceDlg.getCurrentOptions();
-			op._whichDirection = (id == IDM_SEARCH_FINDNEXT?DIR_DOWN:DIR_UP);
-			generic_string s = _findReplaceDlg.getText2search();
-			FindStatus status = FSNoMessage;
-			_findReplaceDlg.processFindNext(s.c_str(), &op, &status);
-			if (status == FSEndReached)
+			if (_findReplaceDlg.isCreated())
 			{
-				generic_string msg = _nativeLangSpeaker.getLocalizedStrFromID("find-status-end-reached", TEXT("Find: Found the 1st occurrence from the top. The end of the document has been reached."));
-				_findReplaceDlg.setStatusbarMessage(msg, FSEndReached);
-			}
-			else if (status == FSTopReached)
-			{
-				generic_string msg = _nativeLangSpeaker.getLocalizedStrFromID("find-status-top-reached", TEXT("Find: Found the 1st occurrence from the bottom. The beginning of the document has been reached."));
-				_findReplaceDlg.setStatusbarMessage(msg, FSTopReached);
+				FindOption op = _findReplaceDlg.getCurrentOptions();
+				NppParameters& nppParams = NppParameters::getInstance();
+				if ((id == IDM_SEARCH_FINDPREV) && (op._searchType == FindRegex) && !nppParams.regexBackward4PowerUser())
+				{
+					// regex upward search is disabled
+					// make this a no-action command
+				}
+				else
+				{
+					op._whichDirection = (id == IDM_SEARCH_FINDNEXT ? DIR_DOWN : DIR_UP);
+					generic_string s = _findReplaceDlg.getText2search();
+					FindStatus status = FSNoMessage;
+					_findReplaceDlg.processFindNext(s.c_str(), &op, &status);
+					if (status == FSEndReached)
+					{
+						generic_string msg = _nativeLangSpeaker.getLocalizedStrFromID("find-status-end-reached", TEXT("Find: Found the 1st occurrence from the top. The end of the document has been reached."));
+						_findReplaceDlg.setStatusbarMessage(msg, FSEndReached);
+					}
+					else if (status == FSTopReached)
+					{
+						generic_string msg = _nativeLangSpeaker.getLocalizedStrFromID("find-status-top-reached", TEXT("Find: Found the 1st occurrence from the bottom. The beginning of the document has been reached."));
+						_findReplaceDlg.setStatusbarMessage(msg, FSTopReached);
+					}
+				}
 			}
 		}
 		break;
@@ -1406,23 +1415,41 @@ void Notepad_plus::command(int id)
 			break;
 
 		case IDM_EDIT_SPLIT_LINES:
-			_pEditView->execute(SCI_TARGETFROMSELECTION);
-			if (_pEditView->execute(SCI_GETEDGEMODE) == EDGE_NONE)
+		{
+			pair<int, int> lineRange = _pEditView->getSelectionLinesRange();
+			if (lineRange.first != -1)
 			{
-				_pEditView->execute(SCI_LINESSPLIT);
+				auto anchorPos = _pEditView->execute(SCI_POSITIONFROMLINE, lineRange.first);
+				auto caretPos = _pEditView->execute(SCI_GETLINEENDPOSITION, lineRange.second);
+				_pEditView->execute(SCI_SETSELECTION, caretPos, anchorPos);
+				_pEditView->execute(SCI_TARGETFROMSELECTION);
+				if (_pEditView->execute(SCI_GETEDGEMODE) == EDGE_NONE)
+				{
+					_pEditView->execute(SCI_LINESSPLIT);
+				}
+				else
+				{
+					auto textWidth = _pEditView->execute(SCI_TEXTWIDTH, STYLE_LINENUMBER, reinterpret_cast<LPARAM>("P"));
+					auto edgeCol = _pEditView->execute(SCI_GETEDGECOLUMN);
+					_pEditView->execute(SCI_LINESSPLIT, textWidth * edgeCol);
+				}
 			}
-			else
-			{
-				auto textWidth = _pEditView->execute(SCI_TEXTWIDTH, STYLE_LINENUMBER, reinterpret_cast<LPARAM>("P"));
-				auto edgeCol = _pEditView->execute(SCI_GETEDGECOLUMN);
-				_pEditView->execute(SCI_LINESSPLIT, textWidth * edgeCol);
-			}
-			break;
+		}
+		break;
 
 		case IDM_EDIT_JOIN_LINES:
-			_pEditView->execute(SCI_TARGETFROMSELECTION);
-			_pEditView->execute(SCI_LINESJOIN);
-			break;
+		{
+			const pair<int, int> lineRange = _pEditView->getSelectionLinesRange();
+			if (lineRange.first != lineRange.second)
+			{
+				auto anchorPos = _pEditView->execute(SCI_POSITIONFROMLINE, lineRange.first);
+				auto caretPos = _pEditView->execute(SCI_GETLINEENDPOSITION, lineRange.second);
+				_pEditView->execute(SCI_SETSELECTION, caretPos, anchorPos);
+				_pEditView->execute(SCI_TARGETFROMSELECTION);
+				_pEditView->execute(SCI_LINESJOIN);
+			}
+		}
+		break;
 
 		case IDM_EDIT_LINE_UP:
 			_pEditView->currentLinesUp();
@@ -3269,31 +3296,6 @@ void Notepad_plus::command(int id)
 		}
 		break;
 
-		case IDM_VIEW_EDGEBACKGROUND:
-		case IDM_VIEW_EDGELINE:
-		case IDM_VIEW_EDGENONE:
-		{
-			int mode;
-			switch (id)
-			{
-			case IDM_VIEW_EDGELINE:
-			{
-				mode = EDGE_LINE;
-				break;
-			}
-			case IDM_VIEW_EDGEBACKGROUND:
-			{
-				mode = EDGE_BACKGROUND;
-				break;
-			}
-			default:
-				mode = EDGE_NONE;
-			}
-			_mainEditView.execute(SCI_SETEDGEMODE, mode);
-			_subEditView.execute(SCI_SETEDGEMODE, mode);
-		}
-		break;
-
 		case IDM_VIEW_LWDEF:
 		case IDM_VIEW_LWALIGN:
 		case IDM_VIEW_LWINDENT:
@@ -3523,6 +3525,10 @@ void Notepad_plus::command(int id)
 			case IDM_FORMAT_TODOS  :
 			case IDM_FORMAT_TOUNIX :
 			case IDM_FORMAT_TOMAC  :
+			case IDM_VIEW_IN_FIREFOX :
+			case IDM_VIEW_IN_CHROME  :
+			case IDM_VIEW_IN_EDGE    :
+			case IDM_VIEW_IN_IE      :
 				_macro.push_back(recordedMacroStep(id));
 				break;
 		}

@@ -1,5 +1,5 @@
 // This file is part of Notepad++ project
-// Copyright (C)2003 Don HO <don.h@free.fr>
+// Copyright (C)2020 Don HO <don.h@free.fr>
 //
 // This program is free software; you can redistribute it and/or
 // modify it under the terms of the GNU General Public License
@@ -245,6 +245,15 @@ void Notepad_plus_Window::init(HINSTANCE hInst, HWND parent, const TCHAR *cmdLin
 	{
 		_notepad_plus_plus_core.launchFileBrowser(fns, true);
 	}
+	else if (_notepad_plus_plus_core._isWorkspaceFileLoadedFromCommandLine)
+	{
+		// Switch back to Project Panel 1, when a workspace file has been specified in the command line.
+		// This code is executed only once in lifetime of the process, at the first initialization. It is necessary, because
+		// the Project Panels are not loaded by Notepad_plus::doOpen only, but also by the Plugin Manager restoring the state
+		// of the last session from config.xml.
+		::SendMessage(_hSelf, WM_COMMAND, IDM_VIEW_PROJECT_PANEL_1, 0);
+	}
+	::SendMessage(_hSelf, WM_ACTIVATE, WA_ACTIVE, 0);
 
 	// Notify plugins that Notepad++ is ready
 	SCNotification scnN;

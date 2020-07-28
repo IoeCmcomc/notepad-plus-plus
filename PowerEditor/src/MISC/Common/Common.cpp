@@ -1,5 +1,5 @@
 // This file is part of Notepad++ project
-// Copyright (C)2003 Don HO <don.h@free.fr>
+// Copyright (C)2020 Don HO <don.h@free.fr>
 //
 // This program is free software; you can redistribute it and/or
 // modify it under the terms of the GNU General Public License
@@ -816,6 +816,39 @@ std::vector<generic_string> stringSplit(const generic_string& input, const gener
 }
 
 
+bool str2numberVector(generic_string str2convert, std::vector<size_t>& numVect)
+{
+	numVect.clear();
+
+	for (auto i : str2convert)
+	{
+		switch (i)
+		{
+		case ' ':
+		case '0': case '1':	case '2': case '3':	case '4':
+		case '5': case '6':	case '7': case '8':	case '9':
+		{
+			// correct. do nothing
+		}
+		break;
+
+		default:
+			return false;
+		}
+	}
+
+	std::vector<generic_string> v = stringSplit(str2convert, TEXT(" "));
+	for (auto i : v)
+	{
+		// Don't treat empty string and the number greater than 9999
+		if (!i.empty() && i.length() < 5)
+		{
+			numVect.push_back(std::stoi(i));
+		}
+	}
+	return true;
+}
+
 generic_string stringJoin(const std::vector<generic_string>& strings, const generic_string& separator)
 {
 	generic_string joined;
@@ -988,6 +1021,20 @@ bool matchInList(const TCHAR *fileName, const std::vector<generic_string> & patt
 			is_matched = true;
 	}
 	return is_matched;
+}
+
+bool allPatternsAreExclusion(const std::vector<generic_string> patterns)
+{
+	bool oneInclusionPatternFound = false;
+	for (size_t i = 0, len = patterns.size(); i < len; ++i)
+	{
+		if (patterns[i][0] != '!')
+		{
+			oneInclusionPatternFound = true;
+			break;
+		}
+	}
+	return not oneInclusionPatternFound;
 }
 
 generic_string GetLastErrorAsString(DWORD errorCode)
